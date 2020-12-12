@@ -24,4 +24,4 @@ url = "2.2"
 reqwest = { version = "0.10", features = ["blocking"] }
 
 [dev-dependencies]
-tiny_http = "0.6"
+tiny_http = "0.7"
