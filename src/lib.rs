@@ -13,6 +13,8 @@ use url::Url;
 mod binary;
 mod script;
 
+static FONT_EXTENSIONS: &[&str] = &[".eot", ".eot?#iefix", ".woff2", ".woff", ".tff"];
+
 /// Inliner error types.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -64,6 +66,10 @@ pub(crate) fn get<P: AsRef<Path>>(
   config: &Config,
   root_path: P,
 ) -> Result<Option<String>> {
+  if !config.inline_fonts && FONT_EXTENSIONS.iter().any(|f| path.ends_with(f)) {
+    return Ok(None);
+  }
+
   let raw = if let Ok(url) = Url::parse(path) {
     if config.inline_remote {
       let response = reqwest::blocking::get(url)?.bytes()?;
