@@ -1,6 +1,6 @@
 use kuchiki::NodeRef;
 
-use std::{path::PathBuf, collections::HashMap};
+use std::{collections::HashMap, path::PathBuf};
 
 pub fn inline_base64(
   mut cache: &mut HashMap<String, Option<String>>,

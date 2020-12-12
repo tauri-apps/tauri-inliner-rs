@@ -2,12 +2,14 @@
 extern crate html5ever;
 
 use std::{
+  collections::HashMap,
   fs,
   path::{Path, PathBuf},
-  collections::HashMap,
 };
 
+use html5ever::QualName;
 use kuchiki::traits::TendrilSink;
+use kuchiki::NodeRef;
 use once_cell::sync::Lazy;
 use url::Url;
 
@@ -61,19 +63,29 @@ fn content_type_map() -> &'static serde_json::Value {
   &MAP
 }
 
-fn load_path<P: AsRef<Path>>(
-  path: &str,
-  config: &Config,
-  root_path: P
-) -> Result<Option<String>> {
+fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Result<Option<String>> {
   if !config.inline_fonts && FONT_EXTENSIONS.iter().any(|f| path.ends_with(f)) {
     return Ok(None);
   }
 
   let raw = if let Ok(url) = Url::parse(path) {
     if config.inline_remote {
-      let response = reqwest::blocking::get(url)?.bytes()?;
-      Some(response.as_ref().to_vec())
+      let response = reqwest::blocking::Client::builder()
+        .build()?
+        .get(url)
+        .send()?;
+      if let Some(content_type) = response.headers().get(reqwest::header::CONTENT_TYPE) {
+        if let Some(extension) = path.split(".").last() {
+          let expected_content_type = content_type_map()
+            .get(extension)
+            .map(|c| c.to_string())
+            .unwrap_or(content_type.to_str().unwrap().to_string());
+          if content_type.to_str().unwrap() != expected_content_type {
+            return Ok(None);
+          }
+        }
+      }
+      Some(response.bytes()?.as_ref().to_vec())
     } else {
       None
     }
@@ -151,12 +163,37 @@ pub fn inline_html_string<P: AsRef<Path>>(
   binary::inline_base64(&mut cache, &config, &root_path, &document)?;
   script::inline_script_link(&mut cache, &config, &root_path, &document)?;
 
-  let mut html = document.to_string();
-  if config.remove_new_lines {
-    html = html.replace("\n", " ").replace("\r\n", " ");
-  }
-  let whitespace_regex = regex::Regex::new(r"(\s{2,})").unwrap();
-  html = whitespace_regex.replace_all(&html, " ").to_string();
+  let html = if config.remove_new_lines {
+    for target in document.select("pre, textarea, script").unwrap() {
+      let node = target.as_node();
+      let element = node.as_element().unwrap();
+      let replacement_node = NodeRef::new_element(
+        QualName::new(None, ns!(html), element.name.local.to_string().into()),
+        None,
+      );
+      replacement_node.append(NodeRef::new_text(
+        target
+          .as_node()
+          .text_contents()
+          .replace("\n", "~~nl~~")
+          .replace(" ", "~~s~~"),
+      ));
+
+      node.insert_after(replacement_node);
+      node.detach();
+    }
+    let html = document.to_string();
+    html
+      .replace("\n", " ")
+      .replace("\r\n", " ")
+      .replace("~~nl~~", "\n")
+      .replace("~~s~~", " ")
+      .to_string()
+  } else {
+    document.to_string()
+  };
+  let whitespace_regex = regex::Regex::new(r"( {2,})").unwrap();
+  let html = whitespace_regex.replace_all(&html, " ").to_string();
 
   Ok(html)
 }
@@ -189,21 +226,20 @@ mod tests {
       }
     });
 
-    let tests = ["css-ext", "css-import"];
+    for file in std::fs::read_dir(root.join(PathBuf::from("src/fixtures"))).unwrap() {
+      let path = file.unwrap().path();
+      let file_name = path.file_name().unwrap().to_str().unwrap();
+      if !file_name.ends_with(".src.html") {
+        continue;
+      }
 
-    for test_case in &tests {
-      let output = super::inline_file(
-        root.join(PathBuf::from(format!(
-          "src/fixtures/{}.src.html",
-          test_case
-        ))),
-        Default::default(),
+      let output = super::inline_file(&path, Default::default()).unwrap();
+      let expected = read_to_string(
+        path
+          .parent()
+          .unwrap()
+          .join(file_name.replace(".src.html", ".result.html")),
       )
-      .unwrap();
-      let expected = read_to_string(root.join(PathBuf::from(format!(
-        "src/fixtures/{}.result.html",
-        test_case
-      ))))
       .unwrap();
       assert_eq!(output, expected);
     }
