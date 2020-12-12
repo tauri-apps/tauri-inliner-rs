@@ -75,11 +75,11 @@ fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Resul
         .get(url)
         .send()?;
       if let Some(content_type) = response.headers().get(reqwest::header::CONTENT_TYPE) {
-        if let Some(extension) = path.split(".").last() {
+        if let Some(extension) = path.split('.').last() {
           let expected_content_type = content_type_map()
             .get(extension)
             .map(|c| c.to_string())
-            .unwrap_or(content_type.to_str().unwrap().to_string());
+            .unwrap_or_else(|| content_type.to_str().unwrap().to_string());
           if content_type.to_str().unwrap() != expected_content_type {
             return Ok(None);
           }
@@ -188,7 +188,6 @@ pub fn inline_html_string<P: AsRef<Path>>(
       .replace("\r\n", " ")
       .replace("~~nl~~", "\n")
       .replace("~~s~~", " ")
-      .to_string()
   } else {
     document.to_string()
   };
