@@ -123,7 +123,6 @@ pub fn inline_html_string<P: AsRef<Path>>(
   root_path: P,
   config: Config,
 ) -> Result<String> {
-  // FIXME: make actual error return
   let root_path = root_path.as_ref().canonicalize().unwrap();
   let document = kuchiki::parse_html().one(html);
 
