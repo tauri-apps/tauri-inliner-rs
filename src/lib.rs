@@ -4,6 +4,7 @@ extern crate html5ever;
 use std::{
   fs,
   path::{Path, PathBuf},
+  collections::HashMap,
 };
 
 use kuchiki::traits::TendrilSink;
@@ -60,11 +61,10 @@ fn content_type_map() -> &'static serde_json::Value {
   &MAP
 }
 
-// TODO cache
-pub(crate) fn get<P: AsRef<Path>>(
+fn load_path<P: AsRef<Path>>(
   path: &str,
   config: &Config,
-  root_path: P,
+  root_path: P
 ) -> Result<Option<String>> {
   if !config.inline_fonts && FONT_EXTENSIONS.iter().any(|f| path.ends_with(f)) {
     return Ok(None);
@@ -107,6 +107,21 @@ pub(crate) fn get<P: AsRef<Path>>(
   Ok(res)
 }
 
+pub(crate) fn get<P: AsRef<Path>>(
+  cache: &mut HashMap<String, Option<String>>,
+  path: &str,
+  config: &Config,
+  root_path: P,
+) -> Result<Option<String>> {
+  if let Some(res) = cache.get(path) {
+    Ok(res.clone())
+  } else {
+    let res = load_path(path, config, root_path)?;
+    cache.insert(path.to_string(), res.clone());
+    Ok(res)
+  }
+}
+
 /// Returns a `Result<String>` of the html file at file path with all the assets inlined.
 ///
 /// ## Arguments
@@ -129,11 +144,12 @@ pub fn inline_html_string<P: AsRef<Path>>(
   root_path: P,
   config: Config,
 ) -> Result<String> {
+  let mut cache = HashMap::new();
   let root_path = root_path.as_ref().canonicalize().unwrap();
   let document = kuchiki::parse_html().one(html);
 
-  binary::inline_base64(&config, &root_path, &document)?;
-  script::inline_script_link(&config, &root_path, &document)?;
+  binary::inline_base64(&mut cache, &config, &root_path, &document)?;
+  script::inline_script_link(&mut cache, &config, &root_path, &document)?;
 
   let mut html = document.to_string();
   if config.remove_new_lines {

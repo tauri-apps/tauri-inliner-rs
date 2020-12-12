@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, collections::HashMap};
 
 use html5ever::QualName;
 use kuchiki::NodeRef;
 use regex::Captures;
 
 pub fn inline_script_link(
+  mut cache: &mut HashMap<String, Option<String>>,
   config: &super::Config,
   root_path: &PathBuf,
   document: &NodeRef,
@@ -22,7 +23,7 @@ pub fn inline_script_link(
       "script" => {
         let text_attr = element.attributes.borrow_mut();
         if let Some(source) = text_attr.get("src") {
-          if let Some(script) = crate::get(&source, &config, &root_path)? {
+          if let Some(script) = crate::get(&mut cache, &source, &config, &root_path)? {
             let replacement_node =
               NodeRef::new_element(QualName::new(None, ns!(html), "script".into()), None);
             replacement_node.append(NodeRef::new_text(script));
@@ -37,6 +38,7 @@ pub fn inline_script_link(
       "style" => {
         let css = node.text_contents();
         match inline_css(
+          &mut cache,
           Some(css),
           root_path
             .clone()
@@ -75,7 +77,7 @@ pub fn inline_script_link(
           out
         };
 
-        match inline_css_path(&css_path, &config, &root_path) {
+        match inline_css_path(&mut cache, &css_path, &config, &root_path) {
           Ok(css) => {
             if let Some(css) = css {
               let replacement_node =
@@ -97,15 +99,17 @@ pub fn inline_script_link(
 }
 
 fn inline_css_path<P: AsRef<Path>>(
+  mut cache: &mut HashMap<String, Option<String>>,
   css_path: &str,
   config: &super::Config,
   root_path: P,
 ) -> crate::Result<Option<String>> {
-  let css = crate::get(css_path, &config, &root_path)?.map(|css| compress_css(&css));
-  inline_css(css, css_path, &config, &root_path)
+  let css = crate::get(&mut cache, css_path, &config, &root_path)?.map(|css| compress_css(&css));
+  inline_css(&mut cache, css, css_path, &config, &root_path)
 }
 
 fn inline_css<P: AsRef<Path>>(
+  mut cache: &mut HashMap<String, Option<String>>,
   css: Option<String>,
   css_path: &str,
   config: &super::Config,
@@ -118,7 +122,7 @@ fn inline_css<P: AsRef<Path>>(
 
   let mut is_alright: crate::Result<()> = Ok(());
 
-  let css_data = css.and_then(|resolved_css| {
+  let css_data = css.map(|resolved_css| {
     let resolved_css = comment_remover.replace_all(&resolved_css, |_: &Captures| "".to_owned());
     let resolved_css = import_finder.replace_all(&resolved_css, |caps: &Captures| {
       let match_url = caps[2].trim().to_string();
@@ -145,7 +149,7 @@ fn inline_css<P: AsRef<Path>>(
           .into_string()
           .unwrap()
       };
-      match inline_css_path(&url_path, &config, root_path.as_ref()) {
+      match inline_css_path(&mut cache, &url_path, &config, root_path.as_ref()) {
         Ok(out) => {
           if match_split.next().is_some() {
             format!(
@@ -179,7 +183,7 @@ fn inline_css<P: AsRef<Path>>(
           .into_string()
           .unwrap()
       };
-      if let Ok(Some(resolved)) = crate::get(&url_path, &config, &root_path) {
+      if let Ok(Some(resolved)) = crate::get(&mut cache, &url_path, &config, &root_path) {
         format!(
           "url('{}')",
           if url_path.ends_with(".css") {
@@ -192,7 +196,7 @@ fn inline_css<P: AsRef<Path>>(
         format!("url('{}')", &caps[1])
       }
     });
-    Some(resolved_css.to_string())
+    resolved_css.to_string()
   });
 
   is_alright.map(|_| css_data)

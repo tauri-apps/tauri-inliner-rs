@@ -1,8 +1,9 @@
 use kuchiki::NodeRef;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, collections::HashMap};
 
 pub fn inline_base64(
+  mut cache: &mut HashMap<String, Option<String>>,
   config: &super::Config,
   root_path: &PathBuf,
   document: &NodeRef,
@@ -20,7 +21,7 @@ pub fn inline_base64(
     };
     let mut attributes = element.attributes.borrow_mut();
     if let Some(source) = attributes.get(attr) {
-      if let Some(resolve_source) = crate::get(source, &config, &root_path)? {
+      if let Some(resolve_source) = crate::get(&mut cache, source, &config, &root_path)? {
         attributes.insert("src", resolve_source);
       }
     }
