@@ -216,10 +216,14 @@ mod tests {
       for request in server.incoming_requests() {
         let url: PathBuf = request.url().chars().skip(1).collect::<String>().into();
         let file_path = fixtures_path.join(url);
-        let contents = read(file_path).unwrap();
+        let contents = read(&file_path).unwrap();
         let mut response = Response::from_data(contents);
+        let content_type = super::content_type_map()
+          .get(file_path.extension().unwrap().to_str().unwrap())
+          .map(|c| c.to_string())
+          .unwrap_or_else(|| "application/octet-stream".to_string());
         response.add_header(
-          Header::from_bytes(&b"Content-Type"[..], &b"application/octet-stream"[..]).unwrap(),
+          Header::from_bytes(&b"Content-Type"[..], &content_type.as_bytes()[..]).unwrap(),
         );
         request.respond(response).unwrap();
       }
