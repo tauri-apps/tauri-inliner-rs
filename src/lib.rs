@@ -82,7 +82,7 @@ fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Resul
         .send()?;
       if let Some(content_type) = response.headers().get(reqwest::header::CONTENT_TYPE) {
         let content_type = content_type.to_str().unwrap();
-        if let Some(extension) = path.split(".").last() {
+        if let Some(extension) = path.split('.').last() {
           let expected_content_type = content_type_map()
             .get(extension)
             .map(|c| c.to_string())
