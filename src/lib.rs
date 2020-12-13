@@ -14,7 +14,7 @@ use once_cell::sync::Lazy;
 use url::Url;
 
 mod binary;
-mod script;
+mod js_css;
 
 static FONT_EXTENSIONS: &[&str] = &[".eot", ".eot?#iefix", ".woff2", ".woff", ".tff"];
 #[cfg(windows)]
@@ -181,7 +181,7 @@ pub fn inline_html_string<P: AsRef<Path>>(
   let document = kuchiki::parse_html().one(html);
 
   binary::inline_base64(&mut cache, &config, &root_path, &document)?;
-  script::inline_script_link(&mut cache, &config, &root_path, &document)?;
+  js_css::inline_script_link(&mut cache, &config, &root_path, &document)?;
 
   let html = if config.remove_new_lines {
     for target in document.select("pre, textarea, script").unwrap() {
