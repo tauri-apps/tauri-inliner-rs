@@ -67,6 +67,10 @@ fn content_type_map() -> &'static serde_json::Value {
 
 fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Result<Option<String>> {
   if !config.inline_fonts && FONT_EXTENSIONS.iter().any(|f| path.ends_with(f)) {
+    log::debug!(
+      "[INLINER] `{}` is a font and config.inline_fonts == false",
+      path
+    );
     return Ok(None);
   }
 
@@ -77,33 +81,54 @@ fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Resul
         .get(url)
         .send()?;
       if let Some(content_type) = response.headers().get(reqwest::header::CONTENT_TYPE) {
-        if let Some(extension) = path.split('.').last() {
+        let content_type = content_type.to_str().unwrap();
+        if let Some(extension) = path.split(".").last() {
           let expected_content_type = content_type_map()
             .get(extension)
             .map(|c| c.to_string())
-            .unwrap_or_else(|| content_type.to_str().unwrap().to_string());
-          if content_type.to_str().unwrap() != expected_content_type {
+            .unwrap_or_else(|| content_type.to_string());
+          if content_type != expected_content_type {
+            log::debug!(
+              "[INLINER] `{}` response's content type is invalid; expected {} but got {}",
+              path,
+              expected_content_type,
+              content_type,
+            );
             return Ok(None);
           }
         }
       }
       Some(response.bytes()?.as_ref().to_vec())
     } else {
+      log::debug!(
+        "[INLINER] `{}` is a remote URL and config.inline_remote == false",
+        path
+      );
       None
     }
   } else {
-    let path = PathBuf::from(path);
-    let path = if path.is_absolute() {
-      path
+    let file_path = PathBuf::from(path);
+    let file_path = if file_path.is_absolute() {
+      file_path
     } else {
-      root_path.as_ref().to_path_buf().join(path)
+      root_path.as_ref().to_path_buf().join(file_path)
     };
-    fs::read(path).map(|file| Some(file.to_vec()))?
+    log::debug!(
+      "[INLINER] loading `{:?}` with fs::read `{:?}`",
+      file_path,
+      path
+    );
+    fs::read(file_path).map(|file| Some(file.to_vec()))?
   };
   let res = if let Some(raw) = raw {
     Some(match path.split('.').last() {
       Some(extension) => {
         if let Some(content_type) = content_type_map().get(extension) {
+          log::debug!(
+            "[INLINER] encoding `{}` as base64 with content type `{}`",
+            path,
+            content_type.as_str().unwrap()
+          );
           format!(
             "data:{};base64,{}",
             content_type.as_str().unwrap(),
@@ -127,6 +152,7 @@ pub(crate) fn get<P: AsRef<Path>>(
   config: &Config,
   root_path: P,
 ) -> Result<Option<String>> {
+  log::debug!("[INLINER] loading {}", path);
   let query_replacer = regex::Regex::new(r"\??#.*").unwrap();
   let path = query_replacer.replace_all(path, "").to_string();
   if path.starts_with("data:") {
@@ -134,6 +160,7 @@ pub(crate) fn get<P: AsRef<Path>>(
   }
 
   if let Some(res) = cache.get(&path) {
+    log::debug!("[INLINER] hit cache on {}", path);
     Ok(res.clone())
   } else {
     match load_path(&path, config, root_path) {
@@ -141,9 +168,8 @@ pub(crate) fn get<P: AsRef<Path>>(
         cache.insert(path, res.clone());
         Ok(res)
       }
-      // TODO log
       Err(e) => {
-        println!("error: {:?}", e);
+        log::error!("error loading {}: {:?}", path, e);
         Ok(None)
       }
     }
@@ -230,6 +256,8 @@ mod tests {
 
   #[test]
   fn match_fixture() {
+    env_logger::init();
+
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixtures_path = root.join("src/fixtures");
 
