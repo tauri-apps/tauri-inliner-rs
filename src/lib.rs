@@ -16,11 +16,7 @@ use url::Url;
 mod binary;
 mod js_css;
 
-static FONT_EXTENSIONS: &[&str] = &[".eot", ".eot?#iefix", ".woff2", ".woff", ".tff"];
-#[cfg(windows)]
-const LINE_ENDING: &str = "\r\n";
-#[cfg(not(windows))]
-const LINE_ENDING: &str = "\n";
+static FONT_EXTENSIONS: &[&str] = &[".eot", ".woff2", ".woff", ".tff"];
 const SPACE_REPLACEMENT: &str = "~~tauri-inliner-space~~";
 const EOL_REPLACEMENT: &str = "~~tauri-inliner-eol~~";
 
@@ -192,10 +188,9 @@ pub fn inline_html_string<P: AsRef<Path>>(
         None,
       );
       replacement_node.append(NodeRef::new_text(
-        target
-          .as_node()
+        node
           .text_contents()
-          .replace(LINE_ENDING, EOL_REPLACEMENT)
+          .replace("\n", EOL_REPLACEMENT)
           .replace(" ", SPACE_REPLACEMENT),
       ));
 
@@ -204,8 +199,9 @@ pub fn inline_html_string<P: AsRef<Path>>(
     }
     let html = document.to_string();
     html
-      .replace(LINE_ENDING, " ")
-      .replace(EOL_REPLACEMENT, LINE_ENDING)
+      .replace("\n", " ")
+      .replace("\r", "")
+      .replace(EOL_REPLACEMENT, "\n")
       .replace(SPACE_REPLACEMENT, " ")
   } else {
     document.to_string()
@@ -224,6 +220,11 @@ mod tests {
     thread::spawn,
   };
   use tiny_http::{Header, Response, Server, StatusCode};
+
+  #[cfg(windows)]
+  const LINE_ENDING: &str = "\r\n";
+  #[cfg(not(windows))]
+  const LINE_ENDING: &str = "\n";
 
   #[test]
   fn match_fixture() {
@@ -263,7 +264,10 @@ mod tests {
         continue;
       }
 
-      let output = super::inline_file(&path, Default::default()).unwrap();
+      let output = super::inline_file(&path, Default::default())
+        .unwrap()
+        .replace("\n", LINE_ENDING);
+
       let expected = read_to_string(
         path
           .parent()
