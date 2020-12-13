@@ -14,7 +14,10 @@ pub fn inline_script_link(
   document: &NodeRef,
 ) -> crate::Result<()> {
   let mut targets = vec![];
-  for target in document.select("script, style, link").unwrap() {
+  for target in document
+    .select("script, style, link, *:not(svg)[style]")
+    .unwrap()
+  {
     targets.push(target);
   }
 
@@ -24,8 +27,8 @@ pub fn inline_script_link(
 
     match element.name.local.to_string().as_str() {
       "script" => {
-        let text_attr = element.attributes.borrow_mut();
-        if let Some(source) = text_attr.get("src") {
+        let attrs = element.attributes.borrow_mut();
+        if let Some(source) = attrs.get("src") {
           if let Some(script) = crate::get(&mut cache, &source, &config, &root_path)? {
             let replacement_node =
               NodeRef::new_element(QualName::new(None, ns!(html), "script".into()), None);
@@ -94,7 +97,29 @@ pub fn inline_script_link(
           Err(e) => return Err(e),
         };
       }
-      _ => panic!("tag not implemented"),
+      _ => {
+        let mut attrs = element.attributes.borrow_mut();
+        if let Some(style) = attrs.get("style") {
+          match inline_css(
+            &mut cache,
+            Some(style.to_string()),
+            root_path
+              .clone()
+              .into_os_string()
+              .into_string()
+              .unwrap()
+              .as_str(),
+            &config,
+            &root_path,
+          ) {
+            Ok(Some(css)) => {
+              attrs.insert("style", css);
+            }
+            Err(e) => return Err(e),
+            _ => {}
+          }
+        }
+      }
     }
   }
 
@@ -107,7 +132,7 @@ fn inline_css_path<P: AsRef<Path>>(
   config: &super::Config,
   root_path: P,
 ) -> crate::Result<Option<String>> {
-  let css = crate::get(&mut cache, css_path, &config, &root_path)?.map(|css| compress_css(&css));
+  let css = crate::get(&mut cache, css_path, &config, &root_path)?;
   inline_css(&mut cache, css, css_path, &config, &root_path)
 }
 
@@ -154,14 +179,15 @@ fn inline_css<P: AsRef<Path>>(
       };
       match inline_css_path(&mut cache, &url_path, &config, root_path.as_ref()) {
         Ok(out) => {
+          let inlined_css = out.map(compress_css).unwrap_or_else(|| "".to_owned());
           if match_split.next().is_some() {
             format!(
               "@media {}{{{}}}",
               match_url.replace(&format!("{} ", css_url), ""),
-              out.unwrap_or_else(|| "".to_owned())
+              inlined_css
             )
           } else {
-            out.unwrap_or_else(|| "".to_owned())
+            inlined_css
           }
         }
         Err(e) => {
@@ -177,6 +203,8 @@ fn inline_css<P: AsRef<Path>>(
       }
       let url_path = if let Ok(url) = url::Url::parse(&css_path) {
         url.join(&caps[1]).unwrap().to_string()
+      } else if let Ok(url) = url::Url::parse(&caps[1]) {
+        url.to_string()
       } else {
         root_path
           .as_ref()
@@ -199,14 +227,14 @@ fn inline_css<P: AsRef<Path>>(
         format!("url('{}')", &caps[1])
       }
     });
-    resolved_css.to_string()
+    compress_css(resolved_css)
   });
 
   is_alright.map(|_| css_data)
 }
 
-fn compress_css(css: &str) -> String {
-  let mut css = css.to_string();
+fn compress_css<S: Into<String>>(css: S) -> String {
+  let mut css = css.into();
   let replaces = &[
     (regex::Regex::new(r"(\s+)").unwrap(), " "),
     (regex::Regex::new(r":(\s+)").unwrap(), ":"),
