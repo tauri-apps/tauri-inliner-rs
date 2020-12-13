@@ -214,8 +214,10 @@ pub fn inline_html_string<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
+  use difference::{Changeset, Difference};
   use std::{
     fs::{read, read_to_string},
+    io::Write,
     path::PathBuf,
     thread::spawn,
   };
@@ -275,7 +277,63 @@ mod tests {
           .join(file_name.replace(".src.html", ".result.html")),
       )
       .unwrap();
-      assert_eq!(output, expected);
+
+      if output != expected {
+        _print_diff(output, expected);
+        panic!("test case `{}` failed", file_name.replace(".src.html", ""));
+      }
     }
+  }
+
+  fn _print_diff(text1: String, text2: String) {
+    let Changeset { diffs, .. } = Changeset::new(&text1, &text2, "\n");
+
+    let mut t = term::stdout().unwrap();
+
+    for i in 0..diffs.len() {
+      match diffs[i] {
+        Difference::Same(ref x) => {
+          t.reset().unwrap();
+          writeln!(t, " {}", x).unwrap();
+        }
+        Difference::Add(ref x) => {
+          match diffs[i - 1] {
+            Difference::Rem(ref y) => {
+              t.fg(term::color::GREEN).unwrap();
+              write!(t, "+").unwrap();
+              let Changeset { diffs, .. } = Changeset::new(y, x, " ");
+              for c in diffs {
+                match c {
+                  Difference::Same(ref z) => {
+                    t.fg(term::color::GREEN).unwrap();
+                    write!(t, "{}", z).unwrap();
+                    write!(t, " ").unwrap();
+                  }
+                  Difference::Add(ref z) => {
+                    t.fg(term::color::WHITE).unwrap();
+                    t.bg(term::color::GREEN).unwrap();
+                    write!(t, "{}", z).unwrap();
+                    t.reset().unwrap();
+                    write!(t, " ").unwrap();
+                  }
+                  _ => (),
+                }
+              }
+              writeln!(t, "").unwrap();
+            }
+            _ => {
+              t.fg(term::color::BRIGHT_GREEN).unwrap();
+              writeln!(t, "+{}", x).unwrap();
+            }
+          };
+        }
+        Difference::Rem(ref x) => {
+          t.fg(term::color::RED).unwrap();
+          writeln!(t, "-{}", x).unwrap();
+        }
+      }
+    }
+    t.reset().unwrap();
+    t.flush().unwrap();
   }
 }
