@@ -131,12 +131,26 @@ pub(crate) fn get<P: AsRef<Path>>(
   config: &Config,
   root_path: P,
 ) -> Result<Option<String>> {
-  if let Some(res) = cache.get(path) {
+  let query_replacer = regex::Regex::new(r"\??#.*").unwrap();
+  let path = query_replacer.replace_all(path, "").to_string();
+  if path.starts_with("data:") {
+    return Ok(None);
+  }
+
+  if let Some(res) = cache.get(&path) {
     Ok(res.clone())
   } else {
-    let res = load_path(path, config, root_path)?;
-    cache.insert(path.to_string(), res.clone());
-    Ok(res)
+    match load_path(&path, config, root_path) {
+      Ok(res) => {
+        cache.insert(path, res.clone());
+        Ok(res)
+      }
+      // TODO log
+      Err(e) => {
+        println!("error: {:?}", e);
+        Ok(None)
+      }
+    }
   }
 }
 
@@ -209,7 +223,7 @@ mod tests {
     path::PathBuf,
     thread::spawn,
   };
-  use tiny_http::{Header, Response, Server};
+  use tiny_http::{Header, Response, Server, StatusCode};
 
   #[test]
   fn match_fixture() {
@@ -219,18 +233,26 @@ mod tests {
     spawn(move || {
       let server = Server::http("localhost:54321").unwrap();
       for request in server.incoming_requests() {
-        let url: PathBuf = request.url().chars().skip(1).collect::<String>().into();
+        let requested = percent_encoding::percent_decode_str(request.url())
+          .decode_utf8_lossy()
+          .to_string();
+        let url: PathBuf = requested.chars().skip(1).collect::<String>().into();
         let file_path = fixtures_path.join(url);
-        let contents = read(&file_path).unwrap();
-        let mut response = Response::from_data(contents);
-        let content_type = super::content_type_map()
-          .get(file_path.extension().unwrap().to_str().unwrap())
-          .map(|c| c.to_string())
-          .unwrap_or_else(|| "application/octet-stream".to_string());
-        response.add_header(
-          Header::from_bytes(&b"Content-Type"[..], &content_type.as_bytes()[..]).unwrap(),
-        );
-        request.respond(response).unwrap();
+        if let Ok(contents) = read(&file_path) {
+          let mut response = Response::from_data(contents);
+          let content_type = super::content_type_map()
+            .get(file_path.extension().unwrap().to_str().unwrap())
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+          response.add_header(
+            Header::from_bytes(&b"Content-Type"[..], &content_type.as_bytes()[..]).unwrap(),
+          );
+          request.respond(response).unwrap();
+        } else {
+          request
+            .respond(Response::empty(StatusCode::from(404)))
+            .unwrap();
+        }
       }
     });
 
