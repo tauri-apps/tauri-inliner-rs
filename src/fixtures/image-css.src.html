@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>css image</title>
+  <style>
+  body {
+    background: black;
+  }
+  #image {
+    background: url(1x1.gif) repeat;
+    height: 400px;
+    width: 400px;
+  }
+
+  #image {
+    /* another version of url include that could break */
+    background: url( "1x1.gif" ) repeat;
+  }
+
+  p:before {
+    content: '<';
+    color: blue;
+  }
+  </style>
+</head>
+<body>
+<div id="image"></div>
+</body>
+</html>

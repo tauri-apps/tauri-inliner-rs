@@ -121,7 +121,7 @@ fn inline_css<P: AsRef<Path>>(
   let comment_remover = regex::Regex::new(r#"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/"#).unwrap();
 
   let import_finder: regex::Regex = regex::Regex::new(r#"(@import)(\s*.*?);"#).unwrap(); // Finds all @import in the css
-  let url_finder = regex::Regex::new(r#"url\s*?\(["']?([^"')]+?)["']?\)"#).unwrap(); // Finds all url(path) in the css and makes them relative to the html file
+  let url_finder = regex::Regex::new(r#"url\s*?\(\s*?["']?([^"')]+?)["']?\s*?\)"#).unwrap(); // Finds all url(path) in the css and makes them relative to the html file
 
   let mut is_alright: crate::Result<()> = Ok(());
 
