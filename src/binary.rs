@@ -21,6 +21,7 @@ pub fn inline_base64(
     };
     let mut attributes = element.attributes.borrow_mut();
     if let Some(source) = attributes.get(attr) {
+      log::debug!("[INLINER] inlining {} on {}", attr, node.to_string());
       if let Some(resolve_source) = crate::get(&mut cache, source, &config, &root_path)? {
         attributes.insert("src", resolve_source);
       }

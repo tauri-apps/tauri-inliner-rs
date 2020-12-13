@@ -29,6 +29,8 @@ pub fn inline_script_link(
       "script" => {
         let attrs = element.attributes.borrow_mut();
         if let Some(source) = attrs.get("src") {
+          log::debug!("[INLINER] inlining src on {}", node.to_string());
+
           if let Some(script) = crate::get(&mut cache, &source, &config, &root_path)? {
             let replacement_node =
               NodeRef::new_element(QualName::new(None, ns!(html), "script".into()), None);
@@ -100,6 +102,7 @@ pub fn inline_script_link(
       _ => {
         let mut attrs = element.attributes.borrow_mut();
         if let Some(style) = attrs.get("style") {
+          log::debug!("[INLINER] inlining style on {}", node.to_string());
           match inline_css(
             &mut cache,
             Some(style.to_string()),
