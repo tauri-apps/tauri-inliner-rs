@@ -9,7 +9,7 @@ pub fn inline_base64(
   document: &NodeRef,
 ) -> crate::Result<()> {
   for target in document
-    .select("video, img, link[rel=icon], link[rel=shortcut]")
+    .select(r#"video, img, link[rel=icon], link[rel="shortcut icon"], link[rel="apple-touch-icon"], link[rel="apple-touch-startup-image"]"#)
     .unwrap()
   {
     let node = target.as_node();
@@ -23,7 +23,7 @@ pub fn inline_base64(
     if let Some(source) = attributes.get(attr) {
       log::debug!("[INLINER] inlining {} on {}", attr, node.to_string());
       if let Some(resolve_source) = crate::get(&mut cache, source, &config, &root_path)? {
-        attributes.insert("src", resolve_source);
+        attributes.insert(attr, resolve_source);
       }
     }
   }
