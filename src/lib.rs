@@ -17,6 +17,12 @@ mod binary;
 mod script;
 
 static FONT_EXTENSIONS: &[&str] = &[".eot", ".eot?#iefix", ".woff2", ".woff", ".tff"];
+#[cfg(windows)]
+const LINE_ENDING: &str = "\r\n";
+#[cfg(not(windows))]
+const LINE_ENDING: &str = "\n";
+const SPACE_REPLACEMENT: &str = "~~tauri-inliner-space~~";
+const EOL_REPLACEMENT: &str = "~~tauri-inliner-eol~~";
 
 /// Inliner error types.
 #[derive(Debug, thiserror::Error)]
@@ -40,7 +46,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Config {
   /// Whether or not to inline fonts in the css as base64.
   pub inline_fonts: bool,
-  /// Replace `\r` and `\r\n` with a space character. Useful to keep line numbers the same in the output to help with debugging.
+  /// Replace EOL's with a space character. Useful to keep line numbers the same in the output to help with debugging.
   pub remove_new_lines: bool,
   /// Whether to inline remote content or not.
   pub inline_remote: bool,
@@ -175,8 +181,8 @@ pub fn inline_html_string<P: AsRef<Path>>(
         target
           .as_node()
           .text_contents()
-          .replace("\n", "~~nl~~")
-          .replace(" ", "~~s~~"),
+          .replace(LINE_ENDING, EOL_REPLACEMENT)
+          .replace(" ", SPACE_REPLACEMENT),
       ));
 
       node.insert_after(replacement_node);
@@ -184,10 +190,9 @@ pub fn inline_html_string<P: AsRef<Path>>(
     }
     let html = document.to_string();
     html
-      .replace("\n", " ")
-      .replace("\r\n", " ")
-      .replace("~~nl~~", "\n")
-      .replace("~~s~~", " ")
+      .replace(LINE_ENDING, " ")
+      .replace(EOL_REPLACEMENT, LINE_ENDING)
+      .replace(SPACE_REPLACEMENT, " ")
   } else {
     document.to_string()
   };
