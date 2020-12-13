@@ -319,7 +319,7 @@ mod tests {
                   _ => (),
                 }
               }
-              writeln!(t, "").unwrap();
+              writeln!(t).unwrap();
             }
             _ => {
               t.fg(term::color::BRIGHT_GREEN).unwrap();
