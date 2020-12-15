@@ -23,6 +23,7 @@ html5ever = "0.25"
 url = "2.2"
 reqwest = { version = "0.10", features = ["blocking"] }
 log = "0.4"
+derive_more = "0.99"
 
 [dev-dependencies]
 tiny_http = "0.7"
