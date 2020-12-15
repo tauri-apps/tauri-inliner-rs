@@ -16,7 +16,9 @@ use url::Url;
 mod binary;
 mod js_css;
 
-static FONT_EXTENSIONS: &[&str] = &[".eot", ".eot?#iefix", ".woff2", ".woff", ".tff"];
+static FONT_EXTENSIONS: &[&str] = &[".eot", ".woff2", ".woff", ".tff"];
+const SPACE_REPLACEMENT: &str = "~~tauri-inliner-space~~";
+const EOL_REPLACEMENT: &str = "~~tauri-inliner-eol~~";
 
 /// Inliner error types.
 #[derive(Debug, thiserror::Error)]
@@ -40,7 +42,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Config {
   /// Whether or not to inline fonts in the css as base64.
   pub inline_fonts: bool,
-  /// Replace `\r` and `\r\n` with a space character. Useful to keep line numbers the same in the output to help with debugging.
+  /// Replace EOL's with a space character. Useful to keep line numbers the same in the output to help with debugging.
   pub remove_new_lines: bool,
   /// Whether to inline remote content or not.
   pub inline_remote: bool,
@@ -80,7 +82,7 @@ fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Resul
         .send()?;
       if let Some(content_type) = response.headers().get(reqwest::header::CONTENT_TYPE) {
         let content_type = content_type.to_str().unwrap();
-        if let Some(extension) = path.split(".").last() {
+        if let Some(extension) = path.split('.').last() {
           let expected_content_type = content_type_map()
             .get(extension)
             .map(|c| c.to_string())
@@ -212,11 +214,10 @@ pub fn inline_html_string<P: AsRef<Path>>(
         None,
       );
       replacement_node.append(NodeRef::new_text(
-        target
-          .as_node()
+        node
           .text_contents()
-          .replace("\n", "~~nl~~")
-          .replace(" ", "~~s~~"),
+          .replace("\n", EOL_REPLACEMENT)
+          .replace(" ", SPACE_REPLACEMENT),
       ));
 
       node.insert_after(replacement_node);
@@ -225,10 +226,9 @@ pub fn inline_html_string<P: AsRef<Path>>(
     let html = document.to_string();
     html
       .replace("\n", " ")
-      .replace("\r\n", " ")
-      .replace("~~nl~~", "\n")
-      .replace("~~s~~", " ")
-      .to_string()
+      .replace("\r", "")
+      .replace(EOL_REPLACEMENT, "\n")
+      .replace(SPACE_REPLACEMENT, " ")
   } else {
     document.to_string()
   };
@@ -240,12 +240,19 @@ pub fn inline_html_string<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
+  use difference::{Changeset, Difference};
   use std::{
     fs::{read, read_to_string},
+    io::Write,
     path::PathBuf,
     thread::spawn,
   };
   use tiny_http::{Header, Response, Server, StatusCode};
+
+  #[cfg(windows)]
+  const LINE_ENDING: &str = "\r\n";
+  #[cfg(not(windows))]
+  const LINE_ENDING: &str = "\n";
 
   #[test]
   fn match_fixture() {
@@ -287,7 +294,10 @@ mod tests {
         continue;
       }
 
-      let output = super::inline_file(&path, Default::default()).unwrap();
+      let output = super::inline_file(&path, Default::default())
+        .unwrap()
+        .replace("\n", LINE_ENDING);
+
       let expected = read_to_string(
         path
           .parent()
@@ -295,7 +305,63 @@ mod tests {
           .join(file_name.replace(".src.html", ".result.html")),
       )
       .unwrap();
-      assert_eq!(output, expected);
+
+      if output != expected {
+        _print_diff(output, expected);
+        panic!("test case `{}` failed", file_name.replace(".src.html", ""));
+      }
     }
+  }
+
+  fn _print_diff(text1: String, text2: String) {
+    let Changeset { diffs, .. } = Changeset::new(&text1, &text2, "\n");
+
+    let mut t = term::stdout().unwrap();
+
+    for i in 0..diffs.len() {
+      match diffs[i] {
+        Difference::Same(ref x) => {
+          t.reset().unwrap();
+          writeln!(t, " {}", x).unwrap();
+        }
+        Difference::Add(ref x) => {
+          match diffs[i - 1] {
+            Difference::Rem(ref y) => {
+              t.fg(term::color::GREEN).unwrap();
+              write!(t, "+").unwrap();
+              let Changeset { diffs, .. } = Changeset::new(y, x, " ");
+              for c in diffs {
+                match c {
+                  Difference::Same(ref z) => {
+                    t.fg(term::color::GREEN).unwrap();
+                    write!(t, "{}", z).unwrap();
+                    write!(t, " ").unwrap();
+                  }
+                  Difference::Add(ref z) => {
+                    t.fg(term::color::WHITE).unwrap();
+                    t.bg(term::color::GREEN).unwrap();
+                    write!(t, "{}", z).unwrap();
+                    t.reset().unwrap();
+                    write!(t, " ").unwrap();
+                  }
+                  _ => (),
+                }
+              }
+              writeln!(t).unwrap();
+            }
+            _ => {
+              t.fg(term::color::BRIGHT_GREEN).unwrap();
+              writeln!(t, "+{}", x).unwrap();
+            }
+          };
+        }
+        Difference::Rem(ref x) => {
+          t.fg(term::color::RED).unwrap();
+          writeln!(t, "-{}", x).unwrap();
+        }
+      }
+    }
+    t.reset().unwrap();
+    t.flush().unwrap();
   }
 }

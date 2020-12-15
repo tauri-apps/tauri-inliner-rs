@@ -1,6 +1,6 @@
 [package]
 name = "tauri-inliner"
-version = "0.1.0"
+version = "0.0.0"
 description = "A library to inline HTML assets."
 readme = "README.md"
 license = "MIT"
@@ -23,8 +23,11 @@ html5ever = "0.25"
 url = "2.2"
 reqwest = { version = "0.10", features = ["blocking"] }
 log = "0.4"
+derive_more = "0.99"
 
 [dev-dependencies]
 tiny_http = "0.7"
 percent-encoding = "2.1"
 env_logger = "0.8"
+difference = "2.0.0"
+term = "0.6"
