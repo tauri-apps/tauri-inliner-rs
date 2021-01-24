@@ -247,6 +247,7 @@ mod tests {
     path::PathBuf,
     thread::spawn,
   };
+  use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
   use tiny_http::{Header, Response, Server, StatusCode};
 
   #[cfg(windows)]
@@ -316,52 +317,65 @@ mod tests {
   fn _print_diff(text1: String, text2: String) {
     let difference = diff(&text1, &text2);
 
-    let mut t = term::stdout().unwrap();
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
     for i in 0..difference.len() {
       match difference[i] {
         Chunk::Equal(x) => {
-          t.reset().unwrap();
-          writeln!(t, " {}", x).unwrap();
+          stdout.reset().unwrap();
+          writeln!(stdout, " {}", x).unwrap();
         }
         Chunk::Insert(x) => {
           match difference[i - 1] {
             Chunk::Delete(ref y) => {
-              t.fg(term::color::GREEN).unwrap();
-              write!(t, "+").unwrap();
+              stdout
+                .set_color(ColorSpec::new().set_fg(Some(Color::Green)))
+                .unwrap();
+              write!(stdout, "+").unwrap();
               let diffs = diff(y, x);
               for c in diffs {
                 match c {
                   Chunk::Equal(z) => {
-                    t.fg(term::color::GREEN).unwrap();
-                    write!(t, "{}", z).unwrap();
-                    write!(t, " ").unwrap();
+                    stdout
+                      .set_color(ColorSpec::new().set_fg(Some(Color::Green)))
+                      .unwrap();
+                    write!(stdout, "{}", z).unwrap();
+                    write!(stdout, " ").unwrap();
                   }
                   Chunk::Insert(z) => {
-                    t.fg(term::color::WHITE).unwrap();
-                    t.bg(term::color::GREEN).unwrap();
-                    write!(t, "{}", z).unwrap();
-                    t.reset().unwrap();
-                    write!(t, " ").unwrap();
+                    stdout
+                      .set_color(
+                        ColorSpec::new()
+                          .set_fg(Some(Color::White))
+                          .set_bg(Some(Color::Green)),
+                      )
+                      .unwrap();
+                    write!(stdout, "{}", z).unwrap();
+                    stdout.reset().unwrap();
+                    write!(stdout, " ").unwrap();
                   }
                   _ => (),
                 }
               }
-              writeln!(t).unwrap();
+              writeln!(stdout).unwrap();
             }
             _ => {
-              t.fg(term::color::BRIGHT_GREEN).unwrap();
-              writeln!(t, "+{}", x).unwrap();
+              stdout
+                .set_color(ColorSpec::new().set_fg(Some(Color::Green)))
+                .unwrap();
+              writeln!(stdout, "+{}", x).unwrap();
             }
           };
         }
         Chunk::Delete(x) => {
-          t.fg(term::color::RED).unwrap();
-          writeln!(t, "-{}", x).unwrap();
+          stdout
+            .set_color(ColorSpec::new().set_fg(Some(Color::Red)))
+            .unwrap();
+          writeln!(stdout, "-{}", x).unwrap();
         }
       }
     }
-    t.reset().unwrap();
-    t.flush().unwrap();
+    stdout.reset().unwrap();
+    stdout.flush().unwrap();
   }
 }
