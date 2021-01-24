@@ -1,16 +1,16 @@
 [package]
 name = "tauri-inliner"
-version = "0.0.0"
+version = "0.0.1"
 description = "A library to inline HTML assets."
 readme = "README.md"
 license = "MIT"
-authors = ["Lucas Nogueira <lucas@tauri.studio>"]
+authors = [ "Lucas Nogueira <lucas@tauri.studio>" ]
 repository = "https://github.com/tauri-apps/tauri-inliner-rs"
 homepage = "https://github.com/tauri-apps/tauri-inliner-rs"
-keywords = ["tauri", "web", "inline", "html", "assets", "build"]
-categories = ["web-programming"]
+keywords = [ "tauri", "web", "inline", "html", "assets", "build" ]
+categories = [ "web-programming" ]
 edition = "2018"
-exclude = ["src/fixtures"]
+exclude = [ "src/fixtures" ]
 
 [dependencies]
 thiserror = "1.0"
@@ -21,7 +21,7 @@ base64 = "0.13"
 kuchiki = "0.8"
 html5ever = "0.25"
 url = "2.2"
-reqwest = { version = "0.11", features = ["blocking"] }
+reqwest = { version = "0.11", features = [ "blocking" ] }
 log = "0.4"
 derive_more = "0.99"
 

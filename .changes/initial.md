@@ -1,5 +1,0 @@
----
-"inliner": patch
----
-
-Initial release.
