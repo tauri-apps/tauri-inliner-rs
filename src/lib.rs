@@ -240,7 +240,7 @@ pub fn inline_html_string<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-  use difference::{Changeset, Difference};
+  use dissimilar::{diff, Chunk};
   use std::{
     fs::{read, read_to_string},
     io::Write,
@@ -314,30 +314,30 @@ mod tests {
   }
 
   fn _print_diff(text1: String, text2: String) {
-    let Changeset { diffs, .. } = Changeset::new(&text1, &text2, "\n");
+    let difference = diff(&text1, &text2);
 
     let mut t = term::stdout().unwrap();
 
-    for i in 0..diffs.len() {
-      match diffs[i] {
-        Difference::Same(ref x) => {
+    for i in 0..difference.len() {
+      match difference[i] {
+        Chunk::Equal(x) => {
           t.reset().unwrap();
           writeln!(t, " {}", x).unwrap();
         }
-        Difference::Add(ref x) => {
-          match diffs[i - 1] {
-            Difference::Rem(ref y) => {
+        Chunk::Insert(x) => {
+          match difference[i - 1] {
+            Chunk::Delete(ref y) => {
               t.fg(term::color::GREEN).unwrap();
               write!(t, "+").unwrap();
-              let Changeset { diffs, .. } = Changeset::new(y, x, " ");
+              let diffs = diff(y, x);
               for c in diffs {
                 match c {
-                  Difference::Same(ref z) => {
+                  Chunk::Equal(z) => {
                     t.fg(term::color::GREEN).unwrap();
                     write!(t, "{}", z).unwrap();
                     write!(t, " ").unwrap();
                   }
-                  Difference::Add(ref z) => {
+                  Chunk::Insert(z) => {
                     t.fg(term::color::WHITE).unwrap();
                     t.bg(term::color::GREEN).unwrap();
                     write!(t, "{}", z).unwrap();
@@ -355,7 +355,7 @@ mod tests {
             }
           };
         }
-        Difference::Rem(ref x) => {
+        Chunk::Delete(x) => {
           t.fg(term::color::RED).unwrap();
           writeln!(t, "-{}", x).unwrap();
         }
