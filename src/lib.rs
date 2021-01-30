@@ -46,6 +46,8 @@ pub struct Config {
   pub remove_new_lines: bool,
   /// Whether to inline remote content or not.
   pub inline_remote: bool,
+  /// Maximum size of files that will be inlined, in bytes
+  pub max_inline_size: usize,
 }
 
 impl Default for Config {
@@ -55,6 +57,7 @@ impl Default for Config {
       inline_fonts: true,
       remove_new_lines: true,
       inline_remote: true,
+      max_inline_size: 5000,
     }
   }
 }
@@ -121,25 +124,33 @@ fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Resul
     fs::read(file_path).map(|file| Some(file.to_vec()))?
   };
   let res = if let Some(raw) = raw {
-    Some(match path.split('.').last() {
-      Some(extension) => {
-        if let Some(content_type) = content_type_map().get(extension) {
-          log::debug!(
-            "[INLINER] encoding `{}` as base64 with content type `{}`",
-            path,
-            content_type.as_str().unwrap()
-          );
-          format!(
-            "data:{};base64,{}",
-            content_type.as_str().unwrap(),
-            base64::encode(&raw)
-          )
-        } else {
-          String::from_utf8_lossy(&raw).to_string()
+    if raw.len() > config.max_inline_size {
+      log::debug!(
+        "[INLINER] `{}` is greater than the max inline size and will not be inlined",
+        path
+      );
+      None
+    } else {
+      Some(match path.split('.').last() {
+        Some(extension) => {
+          if let Some(content_type) = content_type_map().get(extension) {
+            log::debug!(
+              "[INLINER] encoding `{}` as base64 with content type `{}`",
+              path,
+              content_type.as_str().unwrap()
+            );
+            format!(
+              "data:{};base64,{}",
+              content_type.as_str().unwrap(),
+              base64::encode(&raw)
+            )
+          } else {
+            String::from_utf8_lossy(&raw).to_string()
+          }
         }
-      }
-      None => String::from_utf8_lossy(&raw).to_string(),
-    })
+        None => String::from_utf8_lossy(&raw).to_string(),
+      })
+    }
   } else {
     None
   };
@@ -213,6 +224,7 @@ pub fn inline_html_string<P: AsRef<Path>>(
       if element.name.local.to_string().as_str() == "script" {
         let attrs = element.attributes.borrow();
         if attrs.get("defer").is_some()
+          || attrs.get("src").is_some()
           || attrs.get("type").unwrap_or("text/javascript") != "text/javascript"
         {
           continue;
