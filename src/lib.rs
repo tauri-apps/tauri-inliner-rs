@@ -7,9 +7,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use html5ever::QualName;
 use kuchiki::traits::TendrilSink;
-use kuchiki::NodeRef;
 use once_cell::sync::Lazy;
 use url::Url;
 
@@ -217,34 +215,6 @@ pub fn inline_html_string<P: AsRef<Path>>(
   js_css::inline_script_link(&mut cache, &config, &root_path, &document)?;
 
   let html = if config.remove_new_lines {
-    for target in document.select("pre, textarea, script").unwrap() {
-      let node = target.as_node();
-      let element = node.as_element().unwrap();
-
-      if element.name.local.to_string().as_str() == "script" {
-        let attrs = element.attributes.borrow();
-        if attrs.get("defer").is_some()
-          || attrs.get("src").is_some()
-          || attrs.get("type").unwrap_or("text/javascript") != "text/javascript"
-        {
-          continue;
-        }
-      }
-
-      let replacement_node = NodeRef::new_element(
-        QualName::new(None, ns!(html), element.name.local.to_string().into()),
-        None,
-      );
-      replacement_node.append(NodeRef::new_text(
-        node
-          .text_contents()
-          .replace("\n", EOL_REPLACEMENT)
-          .replace(" ", SPACE_REPLACEMENT),
-      ));
-
-      node.insert_after(replacement_node);
-      node.detach();
-    }
     let html = document.to_string();
     html
       .replace("\n", " ")
