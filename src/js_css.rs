@@ -28,6 +28,13 @@ pub fn inline_script_link(
     match element.name.local.to_string().as_str() {
       "script" => {
         let attrs = element.attributes.borrow_mut();
+        // if the script is a defer script or its type is not text/javascript, we won't inline it
+        if attrs.get("defer").is_some()
+          || attrs.get("type").unwrap_or("text/javascript") != "text/javascript"
+        {
+          continue;
+        }
+
         if let Some(source) = attrs.get("src") {
           log::debug!("[INLINER] inlining src on {}", node.to_string());
 
