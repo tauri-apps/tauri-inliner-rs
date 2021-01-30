@@ -26,7 +26,7 @@ log = "0.4"
 derive_more = "0.99"
 
 [dev-dependencies]
-tiny_http = "0.7"
+tiny_http = "0.8"
 percent-encoding = "2.1"
 env_logger = "0.8"
 dissimilar = "1.0"
