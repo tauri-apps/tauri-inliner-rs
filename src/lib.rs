@@ -209,6 +209,16 @@ pub fn inline_html_string<P: AsRef<Path>>(
     for target in document.select("pre, textarea, script").unwrap() {
       let node = target.as_node();
       let element = node.as_element().unwrap();
+
+      if element.name.local.to_string().as_str() == "script" {
+        let attrs = element.attributes.borrow();
+        if attrs.get("defer").is_some()
+          || attrs.get("type").unwrap_or("text/javascript") != "text/javascript"
+        {
+          continue;
+        }
+      }
+
       let replacement_node = NodeRef::new_element(
         QualName::new(None, ns!(html), element.name.local.to_string().into()),
         None,
