@@ -7,9 +7,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use html5ever::QualName;
 use kuchiki::traits::TendrilSink;
-use kuchiki::NodeRef;
 use once_cell::sync::Lazy;
 use url::Url;
 
@@ -17,8 +15,6 @@ mod binary;
 mod js_css;
 
 static FONT_EXTENSIONS: &[&str] = &[".eot", ".woff2", ".woff", ".tff"];
-const SPACE_REPLACEMENT: &str = "~~tauri-inliner-space~~";
-const EOL_REPLACEMENT: &str = "~~tauri-inliner-eol~~";
 
 /// Inliner error types.
 #[derive(Debug, thiserror::Error)]
@@ -42,10 +38,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Config {
   /// Whether or not to inline fonts in the css as base64.
   pub inline_fonts: bool,
-  /// Replace EOL's with a space character. Useful to keep line numbers the same in the output to help with debugging.
-  pub remove_new_lines: bool,
   /// Whether to inline remote content or not.
   pub inline_remote: bool,
+  /// Maximum size of files that will be inlined, in bytes
+  pub max_inline_size: usize,
 }
 
 impl Default for Config {
@@ -53,8 +49,8 @@ impl Default for Config {
   fn default() -> Config {
     Config {
       inline_fonts: true,
-      remove_new_lines: true,
       inline_remote: true,
+      max_inline_size: 5000,
     }
   }
 }
@@ -121,25 +117,33 @@ fn load_path<P: AsRef<Path>>(path: &str, config: &Config, root_path: P) -> Resul
     fs::read(file_path).map(|file| Some(file.to_vec()))?
   };
   let res = if let Some(raw) = raw {
-    Some(match path.split('.').last() {
-      Some(extension) => {
-        if let Some(content_type) = content_type_map().get(extension) {
-          log::debug!(
-            "[INLINER] encoding `{}` as base64 with content type `{}`",
-            path,
-            content_type.as_str().unwrap()
-          );
-          format!(
-            "data:{};base64,{}",
-            content_type.as_str().unwrap(),
-            base64::encode(&raw)
-          )
-        } else {
-          String::from_utf8_lossy(&raw).to_string()
+    if raw.len() > config.max_inline_size {
+      log::debug!(
+        "[INLINER] `{}` is greater than the max inline size and will not be inlined",
+        path
+      );
+      None
+    } else {
+      Some(match path.split('.').last() {
+        Some(extension) => {
+          if let Some(content_type) = content_type_map().get(extension) {
+            log::debug!(
+              "[INLINER] encoding `{}` as base64 with content type `{}`",
+              path,
+              content_type.as_str().unwrap()
+            );
+            format!(
+              "data:{};base64,{}",
+              content_type.as_str().unwrap(),
+              base64::encode(&raw)
+            )
+          } else {
+            String::from_utf8_lossy(&raw).to_string()
+          }
         }
-      }
-      None => String::from_utf8_lossy(&raw).to_string(),
-    })
+        None => String::from_utf8_lossy(&raw).to_string(),
+      })
+    }
   } else {
     None
   };
@@ -205,43 +209,7 @@ pub fn inline_html_string<P: AsRef<Path>>(
   binary::inline_base64(&mut cache, &config, &root_path, &document)?;
   js_css::inline_script_link(&mut cache, &config, &root_path, &document)?;
 
-  let html = if config.remove_new_lines {
-    for target in document.select("pre, textarea, script").unwrap() {
-      let node = target.as_node();
-      let element = node.as_element().unwrap();
-
-      if element.name.local.to_string().as_str() == "script" {
-        let attrs = element.attributes.borrow();
-        if attrs.get("defer").is_some()
-          || attrs.get("type").unwrap_or("text/javascript") != "text/javascript"
-        {
-          continue;
-        }
-      }
-
-      let replacement_node = NodeRef::new_element(
-        QualName::new(None, ns!(html), element.name.local.to_string().into()),
-        None,
-      );
-      replacement_node.append(NodeRef::new_text(
-        node
-          .text_contents()
-          .replace("\n", EOL_REPLACEMENT)
-          .replace(" ", SPACE_REPLACEMENT),
-      ));
-
-      node.insert_after(replacement_node);
-      node.detach();
-    }
-    let html = document.to_string();
-    html
-      .replace("\n", " ")
-      .replace("\r", "")
-      .replace(EOL_REPLACEMENT, "\n")
-      .replace(SPACE_REPLACEMENT, " ")
-  } else {
-    document.to_string()
-  };
+  let html = document.to_string();
   let whitespace_regex = regex::Regex::new(r"( {2,})").unwrap();
   let html = whitespace_regex.replace_all(&html, " ").to_string();
 
@@ -259,11 +227,6 @@ mod tests {
   };
   use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
   use tiny_http::{Header, Response, Server, StatusCode};
-
-  #[cfg(windows)]
-  const LINE_ENDING: &str = "\r\n";
-  #[cfg(not(windows))]
-  const LINE_ENDING: &str = "\n";
 
   #[test]
   fn match_fixture() {
@@ -305,9 +268,7 @@ mod tests {
         continue;
       }
 
-      let output = super::inline_file(&path, Default::default())
-        .unwrap()
-        .replace("\n", LINE_ENDING);
+      let output = super::inline_file(&path, Default::default()).unwrap();
 
       let expected = read_to_string(
         path
@@ -317,7 +278,13 @@ mod tests {
       )
       .unwrap();
 
-      if output != expected {
+      let not_equal = output
+        .chars()
+        .filter(|c| *c as u32 != 13)
+        .zip(expected.chars().filter(|c| *c as u32 != 13))
+        .any(|(a, b)| a != b);
+
+      if not_equal {
         _print_diff(output, expected);
         panic!("test case `{}` failed", file_name.replace(".src.html", ""));
       }
