@@ -285,7 +285,7 @@ mod tests {
       )
       .unwrap();
 
-      if output != expected {
+      if output.replace("\n", " ") != expected.replace("\n", " ") {
         _print_diff(output, expected);
         panic!("test case `{}` failed", file_name.replace(".src.html", ""));
       }
