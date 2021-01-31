@@ -268,8 +268,7 @@ mod tests {
         continue;
       }
 
-      let output = super::inline_file(&path, Default::default())
-        .unwrap();
+      let output = super::inline_file(&path, Default::default()).unwrap();
 
       let expected = read_to_string(
         path
@@ -279,7 +278,11 @@ mod tests {
       )
       .unwrap();
 
-      let not_equal = output.chars().filter(|c| *c as u32 != 13).zip(expected.chars().filter(|c| *c as u32 != 13)).any(|(a, b)| a != b);
+      let not_equal = output
+        .chars()
+        .filter(|c| *c as u32 != 13)
+        .zip(expected.chars().filter(|c| *c as u32 != 13))
+        .any(|(a, b)| a != b);
 
       if not_equal {
         _print_diff(output, expected);
