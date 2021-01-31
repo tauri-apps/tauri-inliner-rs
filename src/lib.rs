@@ -228,11 +228,6 @@ mod tests {
   use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
   use tiny_http::{Header, Response, Server, StatusCode};
 
-  #[cfg(windows)]
-  const LINE_ENDING: &str = "\r\n";
-  #[cfg(not(windows))]
-  const LINE_ENDING: &str = "\n";
-
   #[test]
   fn match_fixture() {
     env_logger::init();
@@ -274,8 +269,7 @@ mod tests {
       }
 
       let output = super::inline_file(&path, Default::default())
-        .unwrap()
-        .replace("\n", LINE_ENDING);
+        .unwrap();
 
       let expected = read_to_string(
         path
@@ -285,7 +279,9 @@ mod tests {
       )
       .unwrap();
 
-      if output.replace("\n", " ") != expected.replace("\n", " ") {
+      let not_equal = output.chars().filter(|c| *c as u32 != 13).zip(expected.chars().filter(|c| *c as u32 != 13)).any(|(a, b)| a != b);
+
+      if not_equal {
         _print_diff(output, expected);
         panic!("test case `{}` failed", file_name.replace(".src.html", ""));
       }
