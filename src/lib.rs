@@ -15,8 +15,6 @@ mod binary;
 mod js_css;
 
 static FONT_EXTENSIONS: &[&str] = &[".eot", ".woff2", ".woff", ".tff"];
-const SPACE_REPLACEMENT: &str = "~~tauri-inliner-space~~";
-const EOL_REPLACEMENT: &str = "~~tauri-inliner-eol~~";
 
 /// Inliner error types.
 #[derive(Debug, thiserror::Error)]
@@ -40,8 +38,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Config {
   /// Whether or not to inline fonts in the css as base64.
   pub inline_fonts: bool,
-  /// Replace EOL's with a space character. Useful to keep line numbers the same in the output to help with debugging.
-  pub remove_new_lines: bool,
   /// Whether to inline remote content or not.
   pub inline_remote: bool,
   /// Maximum size of files that will be inlined, in bytes
@@ -53,7 +49,6 @@ impl Default for Config {
   fn default() -> Config {
     Config {
       inline_fonts: true,
-      remove_new_lines: true,
       inline_remote: true,
       max_inline_size: 5000,
     }
@@ -214,16 +209,7 @@ pub fn inline_html_string<P: AsRef<Path>>(
   binary::inline_base64(&mut cache, &config, &root_path, &document)?;
   js_css::inline_script_link(&mut cache, &config, &root_path, &document)?;
 
-  let html = if config.remove_new_lines {
-    let html = document.to_string();
-    html
-      .replace("\n", " ")
-      .replace("\r", "")
-      .replace(EOL_REPLACEMENT, "\n")
-      .replace(SPACE_REPLACEMENT, " ")
-  } else {
-    document.to_string()
-  };
+  let html = document.to_string();
   let whitespace_regex = regex::Regex::new(r"( {2,})").unwrap();
   let html = whitespace_regex.replace_all(&html, " ").to_string();
 
